@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, filedialog, messagebox
+from tkinter import scrolledtext, filedialog, messagebox
 import threading
 import time
 from datetime import datetime
@@ -23,7 +23,7 @@ class MonitorRedApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Monitor de Red Avanzado")
-        self.root.geometry("700x750")
+        self.root.geometry("1000x700")
         self.root.configure(bg="#1e1e2e")
 
         self.running = False
@@ -50,54 +50,51 @@ class MonitorRedApp:
             font=("Arial", 18, "bold"),
             bg="#1e1e2e",
             fg="#89b4fa"
-        ).pack(pady=10)
+        ).pack(pady=8)
 
-        # Frame para dispositivos monitoreados
-        frame_dispositivos = tk.Frame(self.root, bg="#1e1e2e")
-        frame_dispositivos.pack(fill="x", padx=20, pady=5)
+        # Frame superior con dispositivos y diagnóstico
+        frame_superior = tk.Frame(self.root, bg="#1e1e2e")
+        frame_superior.pack(fill="x", padx=20, pady=5)
 
-        tk.Label(
-            frame_dispositivos,
-            text="Dispositivos Monitoreados",
-            font=("Arial", 12, "bold"),
-            bg="#1e1e2e",
-            fg="#cdd6f4"
-        ).pack(anchor="w")
-
+        # Dispositivos en línea horizontal
         self.labels_dispositivos = {}
         for nombre, ip in DISPOSITIVOS:
-            frame = tk.Frame(frame_dispositivos, bg="#313244", padx=15, pady=8)
-            frame.pack(fill="x", pady=2)
+            frame = tk.Frame(frame_superior, bg="#313244", padx=15, pady=8)
+            frame.pack(side="left", padx=5, fill="x", expand=True)
 
             tk.Label(
                 frame,
-                text=f"{nombre} ({ip})",
-                font=("Arial", 10),
+                text=f"{nombre}",
+                font=("Arial", 10, "bold"),
                 bg="#313244",
-                fg="#cdd6f4",
-                width=30,
-                anchor="w"
-            ).pack(side="left")
+                fg="#cdd6f4"
+            ).pack()
+
+            tk.Label(
+                frame,
+                text=f"({ip})",
+                font=("Arial", 8),
+                bg="#313244",
+                fg="#a6adc8"
+            ).pack()
 
             label_estado = tk.Label(
                 frame,
                 text="-- ms",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
                 bg="#313244",
-                fg="#6c7086",
-                width=15
+                fg="#6c7086"
             )
-            label_estado.pack(side="left", padx=10)
+            label_estado.pack(pady=2)
 
             label_uptime = tk.Label(
                 frame,
                 text="Uptime: --%",
                 font=("Arial", 9),
                 bg="#313244",
-                fg="#a6adc8",
-                width=15
+                fg="#a6adc8"
             )
-            label_uptime.pack(side="right")
+            label_uptime.pack()
 
             self.labels_dispositivos[ip] = {
                 "estado": label_estado,
@@ -110,12 +107,11 @@ class MonitorRedApp:
             text="Presiona Iniciar para comenzar",
             font=("Arial", 11),
             bg="#1e1e2e",
-            fg="#a6adc8",
-            wraplength=650
+            fg="#a6adc8"
         )
-        self.label_diagnostico.pack(pady=10)
+        self.label_diagnostico.pack(pady=5)
 
-        # Botones principales
+        # Botones
         frame_botones = tk.Frame(self.root, bg="#1e1e2e")
         frame_botones.pack(pady=5)
 
@@ -141,8 +137,8 @@ class MonitorRedApp:
         self.btn_escanear.pack(side="left", padx=3)
 
         self.btn_exportar = tk.Button(
-            frame_botones, text="Exportar Todo", font=("Arial", 10),
-            bg="#89b4fa", fg="#1e1e2e", width=12,
+            frame_botones, text="Exportar", font=("Arial", 10),
+            bg="#89b4fa", fg="#1e1e2e", width=10,
             command=self.exportar_logs
         )
         self.btn_exportar.pack(side="left", padx=3)
@@ -154,58 +150,67 @@ class MonitorRedApp:
         )
         self.btn_limpiar.pack(side="left", padx=3)
 
-        # Notebook con pestañas para cada dispositivo
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure('TNotebook', background='#1e1e2e', borderwidth=0)
-        style.configure('TNotebook.Tab', background='#313244', foreground='#cdd6f4',
-                       padding=[15, 5], font=('Arial', 10))
-        style.map('TNotebook.Tab', background=[('selected', '#89b4fa')],
-                 foreground=[('selected', '#1e1e2e')])
+        # Frame contenedor de los 4 paneles (2x2)
+        frame_paneles = tk.Frame(self.root, bg="#1e1e2e")
+        frame_paneles.pack(fill="both", expand=True, padx=10, pady=5)
 
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True, padx=20, pady=10)
+        # Configurar grid 2x2
+        frame_paneles.grid_columnconfigure(0, weight=1)
+        frame_paneles.grid_columnconfigure(1, weight=1)
+        frame_paneles.grid_rowconfigure(0, weight=1)
+        frame_paneles.grid_rowconfigure(1, weight=1)
 
-        # Crear pestañas para cada dispositivo
         self.text_widgets = {}
 
-        # Pestaña Router
-        frame_router = tk.Frame(self.notebook, bg="#1e1e2e")
-        self.notebook.add(frame_router, text="  Router  ")
-        self.text_widgets["Router"] = self._crear_panel_logs(frame_router, "#a6e3a1")
+        # Panel Router (arriba izquierda)
+        self.text_widgets["Router"] = self._crear_panel(
+            frame_paneles, "Router", "#a6e3a1", 0, 0
+        )
 
-        # Pestaña Internet
-        frame_internet = tk.Frame(self.notebook, bg="#1e1e2e")
-        self.notebook.add(frame_internet, text="  Internet  ")
-        self.text_widgets["Internet"] = self._crear_panel_logs(frame_internet, "#89b4fa")
+        # Panel Internet (arriba derecha)
+        self.text_widgets["Internet"] = self._crear_panel(
+            frame_paneles, "Internet", "#89b4fa", 0, 1
+        )
 
-        # Pestaña Tablet
-        frame_tablet = tk.Frame(self.notebook, bg="#1e1e2e")
-        self.notebook.add(frame_tablet, text="  Tablet Android  ")
-        self.text_widgets["Tablet Android"] = self._crear_panel_logs(frame_tablet, "#fab387")
+        # Panel Tablet (abajo izquierda)
+        self.text_widgets["Tablet Android"] = self._crear_panel(
+            frame_paneles, "Tablet Android", "#fab387", 1, 0
+        )
 
-        # Pestaña Escaneo de Red
-        frame_escaneo = tk.Frame(self.notebook, bg="#1e1e2e")
-        self.notebook.add(frame_escaneo, text="  Escaneo Red  ")
-        self.text_widgets["Escaneo"] = self._crear_panel_logs(frame_escaneo, "#cba6f7")
+        # Panel Escaneo (abajo derecha)
+        self.text_widgets["Escaneo"] = self._crear_panel(
+            frame_paneles, "Escaneo de Red", "#cba6f7", 1, 1
+        )
 
-    def _crear_panel_logs(self, parent, color):
+    def _crear_panel(self, parent, titulo, color, row, col):
+        frame = tk.Frame(parent, bg="#1e1e2e")
+        frame.grid(row=row, column=col, sticky="nsew", padx=5, pady=5)
+
+        # Título del panel
+        tk.Label(
+            frame,
+            text=titulo,
+            font=("Arial", 11, "bold"),
+            bg="#1e1e2e",
+            fg=color
+        ).pack(anchor="w")
+
+        # Área de texto
         text = scrolledtext.ScrolledText(
-            parent,
+            frame,
             font=("Courier", 9),
             bg="#11111b",
             fg="#cdd6f4",
             state="disabled",
-            wrap="word"
+            height=12
         )
-        text.pack(fill="both", expand=True, padx=5, pady=5)
+        text.pack(fill="both", expand=True, pady=2)
 
         # Tags de colores
         text.tag_config("ok", foreground="#a6e3a1")
         text.tag_config("warning", foreground="#f9e2af")
         text.tag_config("error", foreground="#f38ba8")
         text.tag_config("info", foreground="#89b4fa")
-        text.tag_config("scan", foreground="#cba6f7")
         text.tag_config("header", foreground=color, font=("Courier", 9, "bold"))
 
         return text
@@ -231,7 +236,6 @@ class MonitorRedApp:
             color = "#a6e3a1" if latencia < 50 else "#f9e2af" if latencia < 100 else "#fab387"
             labels["estado"].config(text=f"{latencia} ms", fg=color)
 
-            # Determinar tag según latencia
             if latencia < 50:
                 tag = "ok"
                 status = "OK"
@@ -242,9 +246,8 @@ class MonitorRedApp:
                 tag = "error"
                 status = "MUY LENTO"
 
-            log_entry = f"[{timestamp}] {latencia:>7} ms - {status}\n"
+            log_entry = f"[{timestamp}] {latencia:>6} ms - {status}\n"
 
-            # Detectar reconexión
             if stats["estado_anterior"] == False:
                 log_entry = f"[{timestamp}] *** RECONECTADO *** {latencia} ms\n"
                 tag = "ok"
@@ -253,27 +256,24 @@ class MonitorRedApp:
         else:
             stats["fail"] += 1
             labels["estado"].config(text="OFFLINE", fg="#f38ba8")
-            log_entry = f"[{timestamp}]   FALLO  - SIN RESPUESTA\n"
+            log_entry = f"[{timestamp}]  FALLO - SIN RESPUESTA\n"
             tag = "error"
 
-            # Detectar nueva desconexión
             if stats["estado_anterior"] == True or stats["estado_anterior"] is None:
                 stats["ultima_caida"] = datetime.now()
-                log_entry = f"[{timestamp}] *** DESCONEXION DETECTADA ***\n"
+                log_entry = f"[{timestamp}] *** DESCONEXION ***\n"
 
             stats["estado_anterior"] = False
 
-        # Agregar al log del dispositivo
-        self.agregar_log_dispositivo(nombre, log_entry, tag)
+        self.agregar_log(nombre, log_entry, tag)
 
-        # Calcular uptime
         total = stats["ok"] + stats["fail"]
         if total > 0:
             uptime = (stats["ok"] / total) * 100
             color_uptime = "#a6e3a1" if uptime > 95 else "#f9e2af" if uptime > 80 else "#f38ba8"
             labels["uptime"].config(text=f"Uptime: {uptime:.1f}%", fg=color_uptime)
 
-    def agregar_log_dispositivo(self, dispositivo, mensaje, tag="info"):
+    def agregar_log(self, dispositivo, mensaje, tag="info"):
         self.logs[dispositivo].append((mensaje, tag))
 
         text_widget = self.text_widgets.get(dispositivo)
@@ -293,11 +293,11 @@ class MonitorRedApp:
         tablet_ok = estados.get("Tablet Android", False)
 
         if not router_ok:
-            return ("CRITICO: Sin conexión al router. Verifica WiFi o cable.", "#f38ba8")
+            return ("CRITICO: Sin conexión al router", "#f38ba8")
         elif not internet_ok and router_ok:
-            return ("PROBLEMA ISP: Router OK pero sin internet. Llama a tu proveedor.", "#f9e2af")
+            return ("PROBLEMA ISP: Router OK pero sin internet", "#f9e2af")
         elif not tablet_ok and router_ok and internet_ok:
-            return ("TABLET OFFLINE: La tablet no responde. Puede estar apagada o fuera de alcance WiFi.", "#fab387")
+            return ("TABLET OFFLINE: No responde", "#fab387")
         elif all(estados.values()):
             return ("Todo funcionando correctamente", "#a6e3a1")
         else:
@@ -311,11 +311,8 @@ class MonitorRedApp:
         self.scanning = True
         self.btn_escanear.config(state="disabled", text="Escaneando...")
 
-        # Cambiar a pestaña de escaneo
-        self.notebook.select(3)
-
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.agregar_log_dispositivo("Escaneo", f"\n[{timestamp}] === INICIANDO ESCANEO DE RED ===\n", "header")
+        self.agregar_log("Escaneo", f"[{timestamp}] === INICIANDO ESCANEO ===\n", "header")
 
         threading.Thread(target=self._escanear_red_thread, daemon=True).start()
 
@@ -323,8 +320,8 @@ class MonitorRedApp:
         base_ip = ".".join(ROUTER_IP.split(".")[:-1])
         dispositivos_encontrados = []
 
-        self.root.after(0, lambda: self.agregar_log_dispositivo(
-            "Escaneo", f"Escaneando rango {base_ip}.1-254...\n\n", "info"))
+        self.root.after(0, lambda: self.agregar_log(
+            "Escaneo", f"Escaneando {base_ip}.1-254...\n\n", "info"))
 
         def ping_ip(ip):
             try:
@@ -342,23 +339,17 @@ class MonitorRedApp:
 
         for result in results:
             if result:
-                ip, latencia = result
-                dispositivos_encontrados.append((ip, latencia))
+                dispositivos_encontrados.append(result)
 
         dispositivos_encontrados.sort(key=lambda x: [int(p) for p in x[0].split(".")])
 
-        # Mostrar resultados
         self.root.after(0, self._mostrar_resultado_escaneo, dispositivos_encontrados)
 
     def _mostrar_resultado_escaneo(self, dispositivos):
         timestamp = datetime.now().strftime("%H:%M:%S")
 
-        self.agregar_log_dispositivo(
-            "Escaneo",
-            f"Encontrados {len(dispositivos)} dispositivos activos:\n",
-            "ok"
-        )
-        self.agregar_log_dispositivo("Escaneo", "-" * 45 + "\n", "info")
+        self.agregar_log("Escaneo", f"Encontrados {len(dispositivos)} dispositivos:\n", "ok")
+        self.agregar_log("Escaneo", "-" * 35 + "\n", "info")
 
         for ip, lat in dispositivos:
             conocido = ""
@@ -369,15 +360,10 @@ class MonitorRedApp:
                     tag = "ok"
                     break
 
-            linea = f"  {ip:15}  {lat:>6} ms{conocido}\n"
-            self.agregar_log_dispositivo("Escaneo", linea, tag)
+            self.agregar_log("Escaneo", f" {ip:15} {lat:>5} ms{conocido}\n", tag)
 
-        self.agregar_log_dispositivo("Escaneo", "-" * 45 + "\n", "info")
-        self.agregar_log_dispositivo(
-            "Escaneo",
-            f"[{timestamp}] === ESCANEO COMPLETADO ===\n\n",
-            "header"
-        )
+        self.agregar_log("Escaneo", "-" * 35 + "\n", "info")
+        self.agregar_log("Escaneo", f"[{timestamp}] === COMPLETADO ===\n\n", "header")
 
         self.btn_escanear.config(state="normal", text="Escanear Red")
         self.scanning = False
@@ -391,7 +377,6 @@ class MonitorRedApp:
                 text_widget.delete("1.0", "end")
                 text_widget.config(state="disabled")
 
-        # Reiniciar estadísticas
         for ip in self.estadisticas:
             self.estadisticas[ip]["ok"] = 0
             self.estadisticas[ip]["fail"] = 0
@@ -418,33 +403,27 @@ class MonitorRedApp:
 
         if archivo:
             with open(archivo, "w") as f:
-                f.write("=" * 60 + "\n")
-                f.write("MONITOR DE RED - REPORTE COMPLETO\n")
+                f.write("=" * 50 + "\n")
+                f.write("MONITOR DE RED - REPORTE\n")
                 f.write(f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("=" * 60 + "\n\n")
+                f.write("=" * 50 + "\n\n")
 
-                # Estadísticas
-                f.write("ESTADISTICAS POR DISPOSITIVO:\n")
-                f.write("-" * 40 + "\n")
+                f.write("ESTADISTICAS:\n")
+                f.write("-" * 30 + "\n")
                 for ip, stats in self.estadisticas.items():
                     total = stats["ok"] + stats["fail"]
                     uptime = (stats["ok"] / total * 100) if total > 0 else 0
-                    f.write(f"\n{stats['nombre']} ({ip})\n")
-                    f.write(f"  Uptime: {uptime:.1f}%\n")
-                    f.write(f"  Checks OK: {stats['ok']}, Fallos: {stats['fail']}\n")
-                    if stats["ultima_caida"]:
-                        f.write(f"  Ultima caida: {stats['ultima_caida'].strftime('%H:%M:%S')}\n")
+                    f.write(f"{stats['nombre']}: Uptime {uptime:.1f}%\n")
 
-                # Logs por dispositivo
                 for nombre, logs in self.logs.items():
                     if logs:
-                        f.write(f"\n\n{'=' * 60}\n")
+                        f.write(f"\n{'=' * 50}\n")
                         f.write(f"HISTORIAL: {nombre}\n")
-                        f.write("=" * 60 + "\n")
+                        f.write("=" * 50 + "\n")
                         for log_entry, tag in logs:
                             f.write(log_entry)
 
-            self.label_diagnostico.config(text=f"Exportado: {archivo}", fg="#a6e3a1")
+            self.label_diagnostico.config(text=f"Exportado", fg="#a6e3a1")
 
     def loop_monitoreo(self):
         while self.running:
@@ -465,11 +444,7 @@ class MonitorRedApp:
 
         timestamp = datetime.now().strftime("%H:%M:%S")
         for nombre, ip in DISPOSITIVOS:
-            self.agregar_log_dispositivo(
-                nombre,
-                f"[{timestamp}] === MONITOR INICIADO ===\n",
-                "header"
-            )
+            self.agregar_log(nombre, f"[{timestamp}] === INICIADO ===\n", "header")
 
         threading.Thread(target=self.loop_monitoreo, daemon=True).start()
 
@@ -480,11 +455,7 @@ class MonitorRedApp:
 
         timestamp = datetime.now().strftime("%H:%M:%S")
         for nombre, ip in DISPOSITIVOS:
-            self.agregar_log_dispositivo(
-                nombre,
-                f"[{timestamp}] === MONITOR DETENIDO ===\n\n",
-                "header"
-            )
+            self.agregar_log(nombre, f"[{timestamp}] === DETENIDO ===\n\n", "header")
 
         self.label_diagnostico.config(text="Monitor detenido", fg="#a6adc8")
 

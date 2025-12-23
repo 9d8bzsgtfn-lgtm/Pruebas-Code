@@ -1,14 +1,13 @@
 import tkinter as tk
-from tkinter import scrolledtext, filedialog, messagebox
+from tkinter import ttk, scrolledtext, filedialog, messagebox
 import threading
 import time
-import subprocess
-import platform
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from pythonping import ping
 
 # --- CONFIGURACIÓN ---
-ROUTER_IP = "192.168.60.1"  # Cambia si tu router es diferente
+ROUTER_IP = "192.168.60.1"
 INTERNET_IP = "8.8.8.8"
 INTERVALO = 3
 
@@ -24,16 +23,22 @@ class MonitorRedApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Monitor de Red Avanzado")
-        self.root.geometry("650x700")
+        self.root.geometry("700x750")
         self.root.configure(bg="#1e1e2e")
 
         self.running = False
         self.scanning = False
-        self.logs = []
-        self.estadisticas = {}  # {ip: {"ok": 0, "fail": 0, "ultima_caida": None}}
+        self.logs = {"Router": [], "Internet": [], "Tablet Android": [], "Escaneo": []}
+        self.estadisticas = {}
 
         for nombre, ip in DISPOSITIVOS:
-            self.estadisticas[ip] = {"nombre": nombre, "ok": 0, "fail": 0, "ultima_caida": None, "estado_anterior": None}
+            self.estadisticas[ip] = {
+                "nombre": nombre,
+                "ok": 0,
+                "fail": 0,
+                "ultima_caida": None,
+                "estado_anterior": None
+            }
 
         self.crear_interfaz()
 
@@ -106,7 +111,7 @@ class MonitorRedApp:
             font=("Arial", 11),
             bg="#1e1e2e",
             fg="#a6adc8",
-            wraplength=600
+            wraplength=650
         )
         self.label_diagnostico.pack(pady=10)
 
@@ -136,61 +141,74 @@ class MonitorRedApp:
         self.btn_escanear.pack(side="left", padx=3)
 
         self.btn_exportar = tk.Button(
-            frame_botones, text="Exportar", font=("Arial", 10),
-            bg="#89b4fa", fg="#1e1e2e", width=10,
+            frame_botones, text="Exportar Todo", font=("Arial", 10),
+            bg="#89b4fa", fg="#1e1e2e", width=12,
             command=self.exportar_logs
         )
         self.btn_exportar.pack(side="left", padx=3)
 
-        # Historial de logs
-        frame_logs = tk.Frame(self.root, bg="#1e1e2e")
-        frame_logs.pack(fill="both", expand=True, padx=20, pady=5)
+        self.btn_limpiar = tk.Button(
+            frame_botones, text="Limpiar", font=("Arial", 10),
+            bg="#fab387", fg="#1e1e2e", width=10,
+            command=self.limpiar_logs
+        )
+        self.btn_limpiar.pack(side="left", padx=3)
 
-        tk.Label(
-            frame_logs,
-            text="Historial de Eventos",
-            font=("Arial", 11, "bold"),
-            bg="#1e1e2e",
-            fg="#cdd6f4"
-        ).pack(anchor="w")
+        # Notebook con pestañas para cada dispositivo
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure('TNotebook', background='#1e1e2e', borderwidth=0)
+        style.configure('TNotebook.Tab', background='#313244', foreground='#cdd6f4',
+                       padding=[15, 5], font=('Arial', 10))
+        style.map('TNotebook.Tab', background=[('selected', '#89b4fa')],
+                 foreground=[('selected', '#1e1e2e')])
 
-        self.text_logs = scrolledtext.ScrolledText(
-            frame_logs,
-            height=10,
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Crear pestañas para cada dispositivo
+        self.text_widgets = {}
+
+        # Pestaña Router
+        frame_router = tk.Frame(self.notebook, bg="#1e1e2e")
+        self.notebook.add(frame_router, text="  Router  ")
+        self.text_widgets["Router"] = self._crear_panel_logs(frame_router, "#a6e3a1")
+
+        # Pestaña Internet
+        frame_internet = tk.Frame(self.notebook, bg="#1e1e2e")
+        self.notebook.add(frame_internet, text="  Internet  ")
+        self.text_widgets["Internet"] = self._crear_panel_logs(frame_internet, "#89b4fa")
+
+        # Pestaña Tablet
+        frame_tablet = tk.Frame(self.notebook, bg="#1e1e2e")
+        self.notebook.add(frame_tablet, text="  Tablet Android  ")
+        self.text_widgets["Tablet Android"] = self._crear_panel_logs(frame_tablet, "#fab387")
+
+        # Pestaña Escaneo de Red
+        frame_escaneo = tk.Frame(self.notebook, bg="#1e1e2e")
+        self.notebook.add(frame_escaneo, text="  Escaneo Red  ")
+        self.text_widgets["Escaneo"] = self._crear_panel_logs(frame_escaneo, "#cba6f7")
+
+    def _crear_panel_logs(self, parent, color):
+        text = scrolledtext.ScrolledText(
+            parent,
             font=("Courier", 9),
             bg="#11111b",
             fg="#cdd6f4",
-            state="disabled"
+            state="disabled",
+            wrap="word"
         )
-        self.text_logs.pack(fill="both", expand=True, pady=3)
+        text.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.text_logs.tag_config("ok", foreground="#a6e3a1")
-        self.text_logs.tag_config("warning", foreground="#f9e2af")
-        self.text_logs.tag_config("error", foreground="#f38ba8")
-        self.text_logs.tag_config("info", foreground="#89b4fa")
-        self.text_logs.tag_config("scan", foreground="#cba6f7")
+        # Tags de colores
+        text.tag_config("ok", foreground="#a6e3a1")
+        text.tag_config("warning", foreground="#f9e2af")
+        text.tag_config("error", foreground="#f38ba8")
+        text.tag_config("info", foreground="#89b4fa")
+        text.tag_config("scan", foreground="#cba6f7")
+        text.tag_config("header", foreground=color, font=("Courier", 9, "bold"))
 
-        # Panel de dispositivos en red
-        frame_red = tk.Frame(self.root, bg="#1e1e2e")
-        frame_red.pack(fill="both", expand=True, padx=20, pady=5)
-
-        tk.Label(
-            frame_red,
-            text="Dispositivos Detectados en Red",
-            font=("Arial", 11, "bold"),
-            bg="#1e1e2e",
-            fg="#cdd6f4"
-        ).pack(anchor="w")
-
-        self.text_red = scrolledtext.ScrolledText(
-            frame_red,
-            height=8,
-            font=("Courier", 9),
-            bg="#11111b",
-            fg="#cba6f7",
-            state="disabled"
-        )
-        self.text_red.pack(fill="both", expand=True, pady=3)
+        return text
 
     def realizar_ping(self, target):
         try:
@@ -204,25 +222,49 @@ class MonitorRedApp:
     def actualizar_dispositivo(self, ip, latencia):
         labels = self.labels_dispositivos[ip]
         stats = self.estadisticas[ip]
+        nombre = stats["nombre"]
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
 
         if latencia is not None:
             stats["ok"] += 1
             color = "#a6e3a1" if latencia < 50 else "#f9e2af" if latencia < 100 else "#fab387"
             labels["estado"].config(text=f"{latencia} ms", fg=color)
 
+            # Determinar tag según latencia
+            if latencia < 50:
+                tag = "ok"
+                status = "OK"
+            elif latencia < 100:
+                tag = "warning"
+                status = "LENTO"
+            else:
+                tag = "error"
+                status = "MUY LENTO"
+
+            log_entry = f"[{timestamp}] {latencia:>7} ms - {status}\n"
+
             # Detectar reconexión
             if stats["estado_anterior"] == False:
-                self.agregar_log(f"RECONECTADO: {stats['nombre']} ({ip}) vuelve a responder", "ok")
+                log_entry = f"[{timestamp}] *** RECONECTADO *** {latencia} ms\n"
+                tag = "ok"
+
             stats["estado_anterior"] = True
         else:
             stats["fail"] += 1
             labels["estado"].config(text="OFFLINE", fg="#f38ba8")
+            log_entry = f"[{timestamp}]   FALLO  - SIN RESPUESTA\n"
+            tag = "error"
 
             # Detectar nueva desconexión
             if stats["estado_anterior"] == True or stats["estado_anterior"] is None:
                 stats["ultima_caida"] = datetime.now()
-                self.agregar_log(f"DESCONEXION: {stats['nombre']} ({ip}) no responde!", "error")
+                log_entry = f"[{timestamp}] *** DESCONEXION DETECTADA ***\n"
+
             stats["estado_anterior"] = False
+
+        # Agregar al log del dispositivo
+        self.agregar_log_dispositivo(nombre, log_entry, tag)
 
         # Calcular uptime
         total = stats["ok"] + stats["fail"]
@@ -230,6 +272,16 @@ class MonitorRedApp:
             uptime = (stats["ok"] / total) * 100
             color_uptime = "#a6e3a1" if uptime > 95 else "#f9e2af" if uptime > 80 else "#f38ba8"
             labels["uptime"].config(text=f"Uptime: {uptime:.1f}%", fg=color_uptime)
+
+    def agregar_log_dispositivo(self, dispositivo, mensaje, tag="info"):
+        self.logs[dispositivo].append((mensaje, tag))
+
+        text_widget = self.text_widgets.get(dispositivo)
+        if text_widget:
+            text_widget.config(state="normal")
+            text_widget.insert("end", mensaje, tag)
+            text_widget.see("end")
+            text_widget.config(state="disabled")
 
     def diagnosticar_red(self):
         estados = {}
@@ -252,34 +304,27 @@ class MonitorRedApp:
             offline = [n for n, ok in estados.items() if not ok]
             return (f"OFFLINE: {', '.join(offline)}", "#f38ba8")
 
-    def agregar_log(self, mensaje, tag="info"):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        entry = f"[{timestamp}] {mensaje}\n"
-        self.logs.append(entry)
-
-        self.text_logs.config(state="normal")
-        self.text_logs.insert("end", entry, tag)
-        self.text_logs.see("end")
-        self.text_logs.config(state="disabled")
-
     def escanear_red(self):
         if self.scanning:
             return
 
         self.scanning = True
         self.btn_escanear.config(state="disabled", text="Escaneando...")
-        self.agregar_log("Iniciando escaneo de red...", "scan")
+
+        # Cambiar a pestaña de escaneo
+        self.notebook.select(3)
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.agregar_log_dispositivo("Escaneo", f"\n[{timestamp}] === INICIANDO ESCANEO DE RED ===\n", "header")
 
         threading.Thread(target=self._escanear_red_thread, daemon=True).start()
 
     def _escanear_red_thread(self):
-        # Detectar el rango de red basado en el router
         base_ip = ".".join(ROUTER_IP.split(".")[:-1])
         dispositivos_encontrados = []
 
-        self.root.after(0, lambda: self.text_red.config(state="normal"))
-        self.root.after(0, lambda: self.text_red.delete("1.0", "end"))
-        self.root.after(0, lambda: self.text_red.insert("end", f"Escaneando {base_ip}.1-254...\n\n"))
+        self.root.after(0, lambda: self.agregar_log_dispositivo(
+            "Escaneo", f"Escaneando rango {base_ip}.1-254...\n\n", "info"))
 
         def ping_ip(ip):
             try:
@@ -290,48 +335,78 @@ class MonitorRedApp:
                 pass
             return None
 
-        # Escanear en paralelo usando threads
-        from concurrent.futures import ThreadPoolExecutor
         ips_to_scan = [f"{base_ip}.{i}" for i in range(1, 255)]
 
         with ThreadPoolExecutor(max_workers=50) as executor:
-            results = executor.map(ping_ip, ips_to_scan)
+            results = list(executor.map(ping_ip, ips_to_scan))
 
         for result in results:
             if result:
                 ip, latencia = result
                 dispositivos_encontrados.append((ip, latencia))
 
+        dispositivos_encontrados.sort(key=lambda x: [int(p) for p in x[0].split(".")])
+
         # Mostrar resultados
-        self.root.after(0, lambda: self.text_red.delete("1.0", "end"))
+        self.root.after(0, self._mostrar_resultado_escaneo, dispositivos_encontrados)
 
-        if dispositivos_encontrados:
-            dispositivos_encontrados.sort(key=lambda x: [int(p) for p in x[0].split(".")])
-            resultado = f"Encontrados {len(dispositivos_encontrados)} dispositivos:\n\n"
-            for ip, lat in dispositivos_encontrados:
-                # Marcar dispositivos conocidos
-                conocido = ""
-                for nombre, ip_conocida in DISPOSITIVOS:
-                    if ip == ip_conocida:
-                        conocido = f" <- {nombre}"
-                        break
-                resultado += f"  {ip:15} ({lat} ms){conocido}\n"
-        else:
-            resultado = "No se encontraron dispositivos"
+    def _mostrar_resultado_escaneo(self, dispositivos):
+        timestamp = datetime.now().strftime("%H:%M:%S")
 
-        self.root.after(0, lambda r=resultado: self._mostrar_resultado_escaneo(r))
+        self.agregar_log_dispositivo(
+            "Escaneo",
+            f"Encontrados {len(dispositivos)} dispositivos activos:\n",
+            "ok"
+        )
+        self.agregar_log_dispositivo("Escaneo", "-" * 45 + "\n", "info")
 
-    def _mostrar_resultado_escaneo(self, resultado):
-        self.text_red.config(state="normal")
-        self.text_red.delete("1.0", "end")
-        self.text_red.insert("end", resultado)
-        self.text_red.config(state="disabled")
+        for ip, lat in dispositivos:
+            conocido = ""
+            tag = "info"
+            for nombre, ip_conocida in DISPOSITIVOS:
+                if ip == ip_conocida:
+                    conocido = f" <- {nombre}"
+                    tag = "ok"
+                    break
+
+            linea = f"  {ip:15}  {lat:>6} ms{conocido}\n"
+            self.agregar_log_dispositivo("Escaneo", linea, tag)
+
+        self.agregar_log_dispositivo("Escaneo", "-" * 45 + "\n", "info")
+        self.agregar_log_dispositivo(
+            "Escaneo",
+            f"[{timestamp}] === ESCANEO COMPLETADO ===\n\n",
+            "header"
+        )
+
         self.btn_escanear.config(state="normal", text="Escanear Red")
         self.scanning = False
-        self.agregar_log("Escaneo de red completado", "scan")
+
+    def limpiar_logs(self):
+        for nombre in self.logs:
+            self.logs[nombre] = []
+            text_widget = self.text_widgets.get(nombre)
+            if text_widget:
+                text_widget.config(state="normal")
+                text_widget.delete("1.0", "end")
+                text_widget.config(state="disabled")
+
+        # Reiniciar estadísticas
+        for ip in self.estadisticas:
+            self.estadisticas[ip]["ok"] = 0
+            self.estadisticas[ip]["fail"] = 0
+            self.estadisticas[ip]["ultima_caida"] = None
+            self.estadisticas[ip]["estado_anterior"] = None
+
+        for ip, labels in self.labels_dispositivos.items():
+            labels["estado"].config(text="-- ms", fg="#6c7086")
+            labels["uptime"].config(text="Uptime: --%", fg="#a6adc8")
+
+        self.label_diagnostico.config(text="Logs limpiados", fg="#a6adc8")
 
     def exportar_logs(self):
-        if not self.logs:
+        tiene_logs = any(len(logs) > 0 for logs in self.logs.values())
+        if not tiene_logs:
             messagebox.showwarning("Aviso", "No hay logs para exportar")
             return
 
@@ -344,27 +419,32 @@ class MonitorRedApp:
         if archivo:
             with open(archivo, "w") as f:
                 f.write("=" * 60 + "\n")
-                f.write("MONITOR DE RED - REPORTE\n")
+                f.write("MONITOR DE RED - REPORTE COMPLETO\n")
                 f.write(f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("=" * 60 + "\n\n")
 
+                # Estadísticas
                 f.write("ESTADISTICAS POR DISPOSITIVO:\n")
                 f.write("-" * 40 + "\n")
                 for ip, stats in self.estadisticas.items():
                     total = stats["ok"] + stats["fail"]
                     uptime = (stats["ok"] / total * 100) if total > 0 else 0
-                    f.write(f"{stats['nombre']} ({ip})\n")
-                    f.write(f"  - Uptime: {uptime:.1f}%\n")
-                    f.write(f"  - Checks OK: {stats['ok']}, Fallos: {stats['fail']}\n")
+                    f.write(f"\n{stats['nombre']} ({ip})\n")
+                    f.write(f"  Uptime: {uptime:.1f}%\n")
+                    f.write(f"  Checks OK: {stats['ok']}, Fallos: {stats['fail']}\n")
                     if stats["ultima_caida"]:
-                        f.write(f"  - Ultima caida: {stats['ultima_caida'].strftime('%H:%M:%S')}\n")
-                    f.write("\n")
+                        f.write(f"  Ultima caida: {stats['ultima_caida'].strftime('%H:%M:%S')}\n")
 
-                f.write("\nHISTORIAL DE EVENTOS:\n")
-                f.write("-" * 40 + "\n")
-                f.writelines(self.logs)
+                # Logs por dispositivo
+                for nombre, logs in self.logs.items():
+                    if logs:
+                        f.write(f"\n\n{'=' * 60}\n")
+                        f.write(f"HISTORIAL: {nombre}\n")
+                        f.write("=" * 60 + "\n")
+                        for log_entry, tag in logs:
+                            f.write(log_entry)
 
-            self.agregar_log(f"Logs exportados: {archivo}", "info")
+            self.label_diagnostico.config(text=f"Exportado: {archivo}", fg="#a6e3a1")
 
     def loop_monitoreo(self):
         while self.running:
@@ -382,14 +462,31 @@ class MonitorRedApp:
         self.running = True
         self.btn_iniciar.config(state="disabled")
         self.btn_detener.config(state="normal")
-        self.agregar_log("Monitor iniciado", "info")
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        for nombre, ip in DISPOSITIVOS:
+            self.agregar_log_dispositivo(
+                nombre,
+                f"[{timestamp}] === MONITOR INICIADO ===\n",
+                "header"
+            )
+
         threading.Thread(target=self.loop_monitoreo, daemon=True).start()
 
     def detener_monitor(self):
         self.running = False
         self.btn_iniciar.config(state="normal")
         self.btn_detener.config(state="disabled")
-        self.agregar_log("Monitor detenido", "info")
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        for nombre, ip in DISPOSITIVOS:
+            self.agregar_log_dispositivo(
+                nombre,
+                f"[{timestamp}] === MONITOR DETENIDO ===\n\n",
+                "header"
+            )
+
+        self.label_diagnostico.config(text="Monitor detenido", fg="#a6adc8")
 
 
 def main():
